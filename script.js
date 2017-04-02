@@ -98,7 +98,7 @@ function draw(seconds) {
         // vanaf nu kan een flagcolor -1 zijn, dan wordt die kleur als altijd correct gezien
 
         const flagColor = drawingData.colors[y][x];
-        if (flagColor == -1) {
+        if (flagColor < 0) {
         	return draw(0);
         }
         // const xChange = flagColor != drawingData.colors[y][x - 1] || flagColor != drawingData.colors[y][x + 1];
@@ -116,7 +116,7 @@ function draw(seconds) {
                 console.log((ax + ", " + ay) + " worden overgeslagen omdat ze al kloppen!");
                 return draw(1);
             }
-            var color = colorScheme[key];
+            var color = colorScheme[flagColor];
             console.log("Pixel tekenen op locatie " + ax + ", " + ay + " ("+color+") (https://www.reddit.com/r/place/#x=" + ax + "&y=" + ay + ")");
             $.ajax({ url: "https://www.reddit.com/api/place/draw.json", type: "POST",
                 headers: { "x-modhash": modhash }, data: { x: ax, y: ay, color: flagColor }
