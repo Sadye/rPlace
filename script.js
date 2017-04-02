@@ -98,7 +98,7 @@ function draw(seconds) {
         // vanaf nu kan een flagcolor -1 zijn, dan wordt die kleur als altijd correct gezien
 
         const flagColor = drawingData.colors[y][x];
-        if (flagColor < 0) {
+        if (flagColor == 16) {
         	return draw(0);
         }
         // const xChange = flagColor != drawingData.colors[y][x - 1] || flagColor != drawingData.colors[y][x + 1];
