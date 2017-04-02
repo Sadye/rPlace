@@ -37,12 +37,12 @@ function replaceTextWithNumbers(){
 		var height = drawingData.colors.length;
 		var tempx = i % width;
 		var tempy = Math.floor(i / width);
-		console.log(width, height, tempx, tempy, drawingData.colors);
-		for (var key in colorScheme) {
-			if (drawingData.colors[tempy][tempx] == key) {
-				drawingData.colors[tempy][tempx] = colorScheme[key];
-				break;
-			}
+		console.log(width, height, tempx, tempy, drawingData.colors);		
+		for (var i = 0; i < colorScheme.length; i++) {
+		  	if(drawingData.colors[tempy][tempx] == colorScheme[i]){
+				drawingData.colors[tempy][tempx] = i;
+			    	break;
+		    	}
 		}
 	}
 }
