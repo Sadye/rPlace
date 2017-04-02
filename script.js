@@ -11,25 +11,23 @@ var index = 0;
 var sec = 0;
 var currentVersion = 7;
 
-const colorScheme = {
-	"wit": 0,
-	"lgrijs": 1,
-	"dgrijs": 2,
-	"zwart": 3,
-	"roze": 4,
-	"rood": 5,
-	"oranje": 6,
-	"bruin": 7,
-	"geel": 8,
-	"lgroen": 9,
-	"groen": 10,
-	"lblauw": 11,
-	"blauw": 12,
-	"dblauw": 13,
-	"magenta": 14,
-	"paars": 15,
-	"niets": -1,
-};
+var colorScheme = ["wit","lgrijs",
+	"dgrijs",
+	"zwart",
+	"roze",
+	"rood",
+	"oranje",
+	"bruin",
+	"geel",
+	"lgroen",
+	"groen",
+	"lblauw",
+	"blauw",
+	"dblauw",
+	"magenta",
+	"paars",
+	"niets"
+];
 
 function replaceTextWithNumbers(){
 	for (var i = 0; i < drawingData.colors[0].length * drawingData.colors.length; i++) {
@@ -116,13 +114,7 @@ function draw(seconds) {
                 console.log((ax + ", " + ay) + " worden overgeslagen omdat ze al kloppen!");
                 return draw(1);
             }
-            var color;
-            for (var key in colorScheme) {
-            	if (colorScheme[key] == flagColor) {
-            		color = key;
-            		break;
-            	}
-            }
+            var color = colorScheme[key];
             console.log("Pixel tekenen op locatie " + ax + ", " + ay + " ("+color+") (https://www.reddit.com/r/place/#x=" + ax + "&y=" + ay + ")");
             $.ajax({ url: "https://www.reddit.com/api/place/draw.json", type: "POST",
                 headers: { "x-modhash": modhash }, data: { x: ax, y: ay, color: flagColor }
