@@ -11,25 +11,25 @@ var index = 0;
 var sec = 0;
 var currentVersion = 7;
 
-const colorScheme = {
-	"wit": 0,
-	"lgrijs": 1,
-	"dgrijs": 2,
-	"zwart": 3,
-	"roze": 4,
-	"rood": 5,
-	"oranje": 6,
-	"bruin": 7,
-	"geel": 8,
-	"lgroen": 9,
-	"groen": 10,
-	"lblauw": 11,
-	"blauw": 12,
-	"dblauw": 13,
-	"magenta": 14,
-	"paars": 15,
-	"niets": -1,
-};
+var colorScheme = [
+	"wit",
+	"lgrijs",
+	"dgrijs",
+	"zwart",
+	"roze",
+	"rood",
+	"oranje",
+	"bruin",
+	"geel",
+	"lgroen",
+	"groen",
+	"lblauw",
+	"blauw",
+	"dblauw",
+	"magenta",
+	"paars",
+	"niets"
+];
 
 function replaceTextWithNumbers(){
 	for (var i = 0; i < drawingData.colors[0].length * drawingData.colors.length; i++) {
@@ -37,12 +37,12 @@ function replaceTextWithNumbers(){
 		var height = drawingData.colors.length;
 		var tempx = i % width;
 		var tempy = Math.floor(i / width);
-		console.log(width, height, tempx, tempy, drawingData.colors);
-		for (var key in colorScheme) {
-			if (drawingData.colors[tempy][tempx] == key) {
-				drawingData.colors[tempy][tempx] = colorScheme[key];
-				break;
-			}
+		console.log(width, height, tempx, tempy, drawingData.colors);		
+		for (var i = 0; i < colorScheme.length; i++) {
+		  	if(drawingData.colors[tempy][tempx] == colorScheme[i]){
+				drawingData.colors[tempy][tempx] = i;
+			    	break;
+		    	}
 		}
 	}
 }
@@ -99,7 +99,7 @@ function draw(seconds) {
         // vanaf nu kan een flagcolor -1 zijn, dan wordt die kleur als altijd correct gezien
 
         const flagColor = drawingData.colors[y][x];
-        if (flagColor == -1) {
+        if (flagColor == 16) {
         	return draw(0);
         }
         // const xChange = flagColor != drawingData.colors[y][x - 1] || flagColor != drawingData.colors[y][x + 1];
@@ -117,13 +117,7 @@ function draw(seconds) {
                 console.log((ax + ", " + ay) + " worden overgeslagen omdat ze al kloppen!");
                 return draw(1);
             }
-            var color;
-            for (var key in colorScheme) {
-            	if (colorScheme[key] == flagColor) {
-            		color = key;
-            		break;
-            	}
-            }
+            var color = colorScheme[flagColor];
             console.log("Pixel tekenen op locatie " + ax + ", " + ay + " ("+color+") (https://www.reddit.com/r/place/#x=" + ax + "&y=" + ay + ")");
             $.ajax({ url: "https://www.reddit.com/api/place/draw.json", type: "POST",
                 headers: { "x-modhash": modhash }, data: { x: ax, y: ay, color: flagColor }
