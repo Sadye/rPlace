@@ -11,7 +11,9 @@ var index = 0;
 var sec = 0;
 var currentVersion = 7;
 
-var colorScheme = ["wit","lgrijs",
+var colorScheme = [
+	"wit",
+	"lgrijs",
 	"dgrijs",
 	"zwart",
 	"roze",
