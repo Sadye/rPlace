@@ -4,12 +4,18 @@ import argparse
 import logging
 import warnings
 import time
+from datetime import datetime, timedelta
 
 import asyncio
 import aiohttp
 
+MAX_QUEUE_SIZE = 25
+
 REDDIT_LOGIN_URL = "https://www.reddit.com/post/login"
 REDDIT_PLACE_URL = "https://www.reddit.com/place?webview=true"
+REDDIT_GET_PIXEL_URL = "https://www.reddit.com/api/place/pixel.json"
+REDDIT_DRAW_PIXEL_URL = "https://www.reddit.com/api/place/draw.json"
+
 DRAWING_DATA_URL = (
     "https://raw.githubusercontent.com/Sadye/rPlace/master/data.json?"
     "no-cache={}"
@@ -23,6 +29,34 @@ modhash_regexp = re.compile(r'"modhash": "(\w+)",')
 ws_url_regexp = re.compile(r'"place_websocket_url": "([^"]+?)",')
 
 
+COLOUR_NAMES = [
+    "wit",
+    "lgrijs",
+    "dgrijs",
+    "zwart",
+    "roze",
+    "rood",
+    "oranje",
+    "bruin",
+    "geel",
+    "lgroen",
+    "groen",
+    "lblauw",
+    "blauw",
+    "dblauw",
+    "magenta",
+    "paars",
+    "niets",
+]
+
+
+def get_colour_name(num):
+    if not (0 <= num <= 15):
+        return "???"
+    else:
+        return COLOUR_NAMES[num]
+
+
 class DrawingPlan:
     """Contains the data on what to draw."""
 
@@ -33,9 +67,11 @@ class DrawingPlan:
         self.start_y = 0
         self.width = 0
         self.height = 0
-        self.colors = [[]]
+        self.colours = [[]]
         self.kill = False
         self.version = -1
+
+        self.pixel_queue = []
 
     async def request(self):
         """Refresh drawing plan data."""
@@ -46,16 +82,16 @@ class DrawingPlan:
         try:
             async with self.session.get(url) as resp:
                 data = await resp.json(content_type=None)
-                self.start_x = data['start_x']
-                self.start_y = data['start_y']
-                self.colors = data['colors']
+                self.start_x = data['startX']
+                self.start_y = data['startY']
+                self.colours = data['colors']
                 self.kill = data['kill']
                 self.version = data['newVersion']
 
-                self.height = len(self.colors)
+                self.height = len(self.colours)
 
                 if self.height > 0:
-                    self.width = max(len(row) for row in self.colors)
+                    self.width = max(len(row) for row in self.colours)
                 else:
                     self.width = 0
 
@@ -68,6 +104,41 @@ class DrawingPlan:
             logger.exception(e)
             return False
 
+    def within_area(self, x, y):
+        return ((self.start_x <= x < self.start_x + self.width) and
+                (self.start_y <= y < self.start_y + self.height))
+
+    def get_colour(self, x, y):
+        x2 = x - self.start_x
+        y2 = y - self.start_y
+
+        return self.colours[y2][x2]
+
+    def check_pixel_update(self, x, y, new_colour):
+        if not self.within_area(x, y):
+            return False
+
+        if self.get_colour(x, y) != new_colour:
+            # Insert at beginning, newer pixel updates
+            # have priority
+            self.pixel_queue.insert(0, (x, y))
+
+            logger.debug("Found wrong pixel update (new colour: %s, should be "
+                         "%s), added to queue: %s",
+                         get_colour_name(new_colour),
+                         get_colour_name(self.get_colour(x, y)),
+                         (x, y))
+
+            if len(self.pixel_queue) > MAX_QUEUE_SIZE:
+                self.pixel_queue.pop()
+
+            return True
+        else:
+            logger.debug("Pixel %s update within our area with correct colour"
+                         " %s.", (x, y), get_colour_name(new_colour))
+
+        return False
+
 
 class RedditPlaceClient:
     def __init__(self, session, loop=None):
@@ -76,37 +147,68 @@ class RedditPlaceClient:
         self.ws_url = ""
 
         self.drawing_plan = DrawingPlan(session)
+        self.pixel_queue = []
 
         if not loop:
             loop = asyncio.get_event_loop()
         self.loop = loop
 
-        self._running = False
-
-    async def main(self, username, password):
-        # Create HTTP session, also automatically stores any cookies created by
-        # any request
+    async def main_loop(self, username, password):
+        logger.info("Start with login...")
         result = await self.login(username, password)
 
         if not result:
             logger.critical("Could not login on reddit.")
             return
 
+        logger.info("Login succesfull")
+
         result = await self.scrape_info()
         if not result:
             logger.critical("Could not obtain modhash and websocket URL.")
             return
 
+        logger.info("Scraped required information.")
         logger.debug("Modhash: %s", self.modhash)
         logger.debug("WS URL: %s", self.ws_url)
 
+        logger.info("Download drawing plan...")
         await self.drawing_plan.request()
+        logger.info("Done downloading data.")
 
-        self.start_pixel_update_listener()
+        self.loop.create_task(self.pixel_update_listener())
 
-    @property
-    def running(self):
-        return self._running
+        next_draw = datetime.now()
+        while True:
+            if next_draw <= datetime.now():
+                # Time to draw a new pixel
+                pixel = await self.search_for_pixel()
+                if pixel:
+                    x, y = pixel
+                    new_colour = self.drawing_plan.get_colour(x, y)
+                    result = await self.draw_pixel(x, y, new_colour)
+
+                    if type(result) != bool:
+                        # We got a response with a "wait_seconds" from the
+                        # server, result is therefore an integer
+                        next_draw = datetime.now() + timedelta(seconds=result)
+                    elif not result:
+                        # Something went wrong try again in 30 seconds
+                        next_draw = datetime.now() + timedelta(seconds=30)
+                    else:
+                        # Succesful
+                        next_draw = datetime.now() + timedelta(seconds=300)
+                else:
+                    # No pixel to draw, try in one minute again
+                    logger.info("Empty pixel queue.")
+                    next_draw = datetime.now() + timedelta(seconds=60)
+            else:
+                diff = next_draw - datetime.now()
+                logger.info("Next action in %d seconds..", diff.seconds)
+                logger.debug("Pixel queue length: %d",
+                             len(self.drawing_plan.pixel_queue))
+
+                await asyncio.sleep(10)
 
     async def login(self, username, password) -> bool:
         """Login on reddit.com using the given username and password."""
@@ -158,10 +260,6 @@ class RedditPlaceClient:
 
             return True
 
-    def start_pixel_update_listener(self):
-        self._running = True
-        self.loop.create_task(self.pixel_update_listener())
-
     async def pixel_update_listener(self):
         """Coroutine to listen to pixel update events through the websocket.
 
@@ -179,14 +277,100 @@ class RedditPlaceClient:
             logger.info("Connected to websocket for pixel updates.")
 
             async for msg in ws:
-                print(msg)  # TODO: update local pixel data
+                if msg.type == aiohttp.WSMsgType.TEXT:
+                    try:
+                        data = json.loads(msg.data)
+                    except:
+                        continue
 
-        self._running = False
+                    if data['type'] == 'place':
+                        x = data['payload']['x']
+                        y = data['payload']['y']
+                        colour = data['payload']['color']
 
+                        self.drawing_plan.check_pixel_update(x, y, colour)
 
-async def create_drawer(username, password, loop=None):
-    if not loop:
-        loop = asyncio.get_event_loop()
+            logger.warning("Lost connection to websocket...")
+
+    async def search_for_pixel(self):
+        while self.drawing_plan.pixel_queue:
+            x, y = self.drawing_plan.pixel_queue.pop(0)
+
+            # TODO: Local data check
+
+            colour = await self.get_pixel_value_remote(x, y)
+
+            if colour == -1:
+                continue
+
+            if colour == self.drawing_plan.get_colour(x, y):
+                # Colour already correct on server side, skip and search for
+                # a new one
+                logger.info("Found a queued pixel %s which is already fixed on"
+                            " the server side. Skipping.", (x, y))
+
+                # Wait a second to not spam the reddit server
+                await asyncio.sleep(1)
+                continue
+            else:
+                return x, y
+
+        return None
+
+    async def get_pixel_value_remote(self, x, y):
+        params = {'x': int(x), 'y': int(y)}
+        async with self.session.get(REDDIT_GET_PIXEL_URL,
+                                    params=params) as resp:
+            if resp.status != 200:
+                text = await resp.text()
+                logger.warning("Could not get remote pixel value: %s", text)
+                return -1
+
+            try:
+                data = await resp.json(content_type=None)
+            except Exception as e:
+                logger.exception(e)
+                return -1
+
+            return data['color']
+
+    async def draw_pixel(self, x, y, new_colour):
+        logger.info("Drawing a pixel at %s with new colour %s",
+                    (x, y), get_colour_name(new_colour))
+
+        headers = {
+            'x-modhash': self.modhash
+        }
+
+        params = {
+            'x': x,
+            'y': y,
+            'color': new_colour
+        }
+
+        async with self.session.post(REDDIT_DRAW_PIXEL_URL, headers=headers,
+                                     data=params) as resp:
+            if resp.status == 429:
+                # We had to wait a bit longer...
+                seconds = 60 * 5
+                try:
+                    data = await resp.json(content_type=None)
+                    seconds = data['wait_seconds']
+                except Exception as e:
+                    logger.exception(e)
+
+                logger.warning("We were to early to try drawing a pixel. "
+                               "We need to wait another %d seconds before we "
+                               "can draw a pixel.", seconds)
+
+                return seconds
+            elif resp.status != 200:
+                text = await resp.text()
+                logger.warning("Could not draw pixel: %s", text)
+                return False
+            else:
+                return True
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -206,7 +390,9 @@ if __name__ == '__main__':
         warnings.filterwarnings("always", category=ResourceWarning)
         loop.set_debug(True)
 
+    # Create HTTP session, also automatically stores any cookies created by
+    # any request
     with aiohttp.ClientSession() as session:
         place_client = RedditPlaceClient(session)
-        loop.create_task(place_client.main(args.username, args.password))
+        loop.create_task(place_client.main_loop(args.username, args.password))
         loop.run_forever()
