@@ -1,15 +1,17 @@
 import re
+import json
 import argparse
-import asyncio
-import aiohttp
 import logging
 import warnings
-from typing import Tuple
+
+import asyncio
+import aiohttp
 
 REDDIT_LOGIN_URL = "https://www.reddit.com/post/login"
 REDDIT_PLACE_URL = "https://www.reddit.com/place?webview=true"
 
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 logging.basicConfig()
 
 modhash_regexp = re.compile(r'"modhash": "(\w+)",')
@@ -17,10 +19,38 @@ ws_url_regexp = re.compile(r'"place_websocket_url": "([^"]+?)",')
 
 
 class RedditPlaceClient:
-    def __init__(self, session):
+    def __init__(self, session, loop=None):
         self.session = session
         self.modhash = ""
         self.ws_url = ""
+
+        if not loop:
+            loop = asyncio.get_event_loop()
+        self.loop = loop
+        self._running = False
+
+    async def main(self, username, password):
+        # Create HTTP session, also automatically stores any cookies created by
+        # any request
+        result = await self.login(username, password)
+
+        if not result:
+            logger.critical("Could not login on reddit.")
+            return
+
+        result = await self.scrape_info()
+        if not result:
+            logger.critical("Could not obtain modhash and websocket URL.")
+            return
+
+        logger.debug("Modhash: %s", self.modhash)
+        logger.debug("WS URL: %s", self.ws_url)
+
+        self.start_pixel_update_listener()
+
+    @property
+    def running(self):
+        return self._running
 
     async def login(self, username, password) -> bool:
         """Login on reddit.com using the given username and password."""
@@ -72,29 +102,35 @@ class RedditPlaceClient:
 
             return True
 
+    def start_pixel_update_listener(self):
+        self._running = True
+        self.loop.create_task(self.pixel_update_listener())
 
-async def pixel_drawer_main(username, password, loop=None):
+    async def pixel_update_listener(self):
+        """Coroutine to listen to pixel update events through the websocket.
+
+        Each pixel update is sent as a JSON object through the websocket
+        connection, although in our experience at some point updates start to
+        lag behind. A complete update is necessary once in a while."""
+
+        if not self.ws_url:
+            raise Exception("No place websocket URL available. Please use the "
+                            "`scrape_info` method first.")
+
+        logger.debug("Connecting to websocket...")
+
+        async with self.session.ws_connect(self.ws_url) as ws:
+            logger.info("Connected to websocket for pixel updates.")
+
+            async for msg in ws:
+                print(msg)  # TODO: update local pixel data
+
+        self._running = False
+
+
+async def create_drawer(username, password, loop=None):
     if not loop:
         loop = asyncio.get_event_loop()
-
-    # Create HTTP session, also automatically stores any cookies created by any
-    # request
-    async with aiohttp.ClientSession(loop=loop) as session:
-        client = RedditPlaceClient(session)
-        result = await client.login(username, password)
-
-        if not result:
-            logger.critical("Could not login on reddit.")
-            return
-
-        result = await client.scrape_info()
-        if not result:
-            logger.critical("Could not obtain modhash and websocket URL.")
-            return
-
-        logger.debug("Modhash: %s", client.modhash)
-        logger.debug("WS URL: %s", client.ws_url)
-
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -114,4 +150,7 @@ if __name__ == '__main__':
         warnings.filterwarnings("always", category=ResourceWarning)
         loop.set_debug(True)
 
-    loop.run_until_complete(pixel_drawer_main(args.username, args.password))
+    with aiohttp.ClientSession() as session:
+        place_client = RedditPlaceClient(session)
+        loop.create_task(place_client.main(args.username, args.password))
+        loop.run_forever()
