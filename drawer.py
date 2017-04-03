@@ -48,7 +48,6 @@ DRAWING_DATA_URL = (
 )
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
 logging.basicConfig()
 
 modhash_regexp = re.compile(r'"modhash": "(\w+)",')
@@ -77,7 +76,8 @@ COLOUR_NAMES = [
 
 
 def get_colour_name(num):
-    if not (0 <= num <= 15):
+    if not (0 <= num < 16):
+        logger.debug("Unknown colour: %d", num)
         return "???"
     else:
         return COLOUR_NAMES[num]
@@ -132,7 +132,8 @@ class DrawingPlan:
 
     def within_area(self, x, y):
         return ((self.start_x <= x < self.start_x + self.width) and
-                (self.start_y <= y < self.start_y + self.height))
+                (self.start_y <= y < self.start_y + self.height) and
+                self.get_colour(x, y) != -1)
 
     def get_colour(self, x, y):
         x2 = x - self.start_x
@@ -202,7 +203,9 @@ class RedditPlaceClient:
         await self.drawing_plan.request()
         logger.info("Done downloading data.")
 
+        # Create the two other main tasks
         self.loop.create_task(self.pixel_update_listener())
+        self.loop.create_task(self.data_updater())
 
         next_draw = datetime.now()
         while True:
@@ -318,15 +321,33 @@ class RedditPlaceClient:
 
             logger.warning("Lost connection to websocket...")
 
+    async def data_updater(self):
+        """Repeatedly check for drawing plan updates.
+
+        Should be scheduled once using `BaseEventLoop.create_task`."""
+
+        while True:
+            await asyncio.sleep(600)
+            await self.drawing_plan.request()
+
     async def search_for_pixel(self):
+        """Checks the pixel queue for pixels that are still wrongly coloured.
+        It checks this by requesting the actual colour on the reddit server
+        side, and if it's still wrong it returns this pixel.
+
+        If something with the request goes wrong, this pixel is removed from
+        the queue, and we give the reddit servers some breathing time."""
+
         while self.drawing_plan.pixel_queue:
             x, y = self.drawing_plan.pixel_queue.pop(0)
 
             # TODO: Local data check
 
-            colour = await self.get_pixel_value_remote(x, y)
+            status, colour = await self.get_pixel_value_remote(x, y)
 
-            if colour == -1:
+            # Server overloaded
+            if status == 502:
+                await asyncio.sleep(5)
                 continue
 
             if colour == self.drawing_plan.get_colour(x, y):
@@ -336,7 +357,7 @@ class RedditPlaceClient:
                             " the server side. Skipping.", (x, y))
 
                 # Wait a second to not spam the reddit server
-                await asyncio.sleep(1)
+                await asyncio.sleep(2)
                 continue
             else:
                 return x, y
@@ -344,10 +365,16 @@ class RedditPlaceClient:
         return None
 
     async def get_pixel_value_remote(self, x, y):
+        """Retreives the actual colour on the reddit server. Also returns the
+        response status code to be able to act accordingly."""
+
         params = {'x': int(x), 'y': int(y)}
         async with self.session.get(REDDIT_GET_PIXEL_URL,
                                     params=params) as resp:
-            if resp.status != 200:
+            if resp.status == 502:
+                logger.info("Reddit API overloaded, no result.")
+                return -1
+            elif resp.status != 200:
                 text = await resp.text()
                 logger.warning("Could not get remote pixel value: %s", text)
                 return -1
@@ -358,9 +385,16 @@ class RedditPlaceClient:
                 logger.exception(e)
                 return -1
 
-            return data['color']
+            return resp.status, data['color']
 
     async def draw_pixel(self, x, y, new_colour):
+        """Send a request to the reddit server to draw a pixel.
+
+        When it returns a boolean, then it either went okay (True), or not
+        (False). It is also possible to get an integer as return value, in that
+        case it contains the number of seconds to wait before you can make
+        another drawing request."""
+
         logger.info("Drawing a pixel at %s with new colour %s",
                     (x, y), get_colour_name(new_colour))
 
@@ -402,17 +436,18 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('username', help="Your reddit username")
     parser.add_argument('password', help="Your reddit password")
-    parser.add_argument(
-        '-d', '--debug', action="store_true", default=False,
-        help="Enable debug mode."
-    )
+    parser.add_argument('-v', '--verbose', action='count', default=0,
+                        help="Enable verbose output, has two levels")
 
     args = parser.parse_args()
 
     loop = asyncio.get_event_loop()
+    logging.getLogger().setLevel(logging.INFO)
 
-    if args.debug:
+    if args.verbose > 0:
         logging.getLogger().setLevel(logging.DEBUG)
+
+    if args.verbose > 1:
         warnings.filterwarnings("always", category=ResourceWarning)
         loop.set_debug(True)
 
