@@ -22,7 +22,7 @@ function start(){
 
 // Haalt de opdracht op van github
 function updateGoal() {
-	console.log("Gegevens bijwerken... Ceterum censeo The Void esse delendam");
+	console.log("Gegevens bijwerken... Ceterum censeo void esse delendam.");
 	const url = 'https://raw.githubusercontent.com/Sadye/rPlace/master/data.json' + '?no-cache=' + (new Date()).getTime();
 	//Hier komt later een functie om meerdere opdrachten te kunnen verdelen over gebruikers
 	fetch(url)
@@ -135,7 +135,7 @@ function drawPixel() {
 		var ay = currentY + drawingData.startY;
 		var newColor = drawingData.colors[currentY][currentX];
 		// probeer het tekenen
-		console.log("Pixel tekenen op locatie (" + ax + ", " + ay + ") Kleur: "+getColorName(newColor)+" (oud: "+getColorName(getTileAt(ax, ay)) +") (https://www.reddit.com/r/place/#x=" + ax + "&y=" + ay + ")");
+		console.log("Pixel tekenen op locatie (" + ax + ", " + ay + ") Kleur: "+getColorName(newColor)+" (was eerst "+getColorName(getTileAt(ax, ay)) +") (https://www.reddit.com/r/place/#x=" + ax + "&y=" + ay + ")");
 		$.ajax({ url: "https://www.reddit.com/api/place/draw.json", type: "POST",
 			headers: { "x-modhash": modhash }, data: { x: ax, y: ay, color: newColor }
 		})
