@@ -22,7 +22,7 @@ function start(){
 
 // Haalt de opdracht op van github
 function updateGoal() {
-	console.log("Updating target area... Ceterum censeo The Void esse delendam");
+	console.log("Gegevens bijwerken... Ceterum censeo The Void esse delendam");
 	const url = 'https://raw.githubusercontent.com/Sadye/rPlace/master/data.json' + '?no-cache=' + (new Date()).getTime();
 	//Hier komt later een functie om meerdere opdrachten te kunnen verdelen over gebruikers
 	fetch(url)
@@ -47,7 +47,7 @@ function updateGoal() {
 		// Neem een willekeurige x en y uit de teken-data
 		currentY = Math.floor(Math.random() * drawingData.colors.length);
 		currentX = Math.floor(Math.random() * drawingData.colors[currentY].length);
-		console.log("Succesfully acquired new target area");
+		console.log("Gegevens succesvol bijgewerkt.");
 	})
 	.catch(function(error) {
 		console.log(error);
