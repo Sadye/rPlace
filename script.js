@@ -23,7 +23,7 @@ function start(){
 // Haalt de opdracht op van github
 function updateGoal() {
 	console.log("Updating target area... Ceterum censeo The Void esse delendam");
-	const url = 'https://raw.githubusercontent.com/Sadye/rPlace/master/data.json' + '?no-cache=' + (new Date).getTime();
+	const url = 'https://raw.githubusercontent.com/Sadye/rPlace/master/data.json' + '?no-cache=' + (new Date()).getTime();
 	//Hier komt later een functie om meerdere opdrachten te kunnen verdelen over gebruikers
 	fetch(url)
 	.then((resp) => resp.json())
@@ -123,7 +123,7 @@ function checkPixels() {
 	    	currentX++;
 	    	setTimeout( () => checkPixels(), 10 * 1e3);
 	    	return;
-	    })
+	    });
 	}, 1000);
 }
 
@@ -143,8 +143,8 @@ function drawPixel() {
         	// tekenen is gelukt
         	// opnieuw proberen na 10s
         	setTimeout(() => {
-        		checkPixels()
-        	}, res.wait_seconds * 1e3)
+        		checkPixels();
+        	}, res.wait_seconds * 1e3);
         	console.log("Succes! Nieuwe poging over " + res.wait_seconds + " seconden.");
 
         	// laat mensen weten dat het nog werkt
@@ -152,7 +152,7 @@ function drawPixel() {
         	intervalId = setInterval( () => {
         		secondsLeft -= 10;
         		console.log("Nog " + secondsLeft + " seconden tot de volgende actie!");
-        	}, 10 * 1e3)
+        	}, 10 * 1e3);
         	return;
         })
 		.error( res => {
@@ -161,26 +161,26 @@ function drawPixel() {
 	        	// Geef error-melding. Als er een http-error is (status 429)
 	        	// gebruik dan die waarde voor de volgende actie, anders opnieuw proberen in 10s
 	        	setTimeout(() => {
-	        		checkPixels()
+	        		checkPixels();
 	        	}, Math.max(Math.ceil(res.responseJSON.wait_seconds), 10) * 1e3);
 	        	console.log("Probleem! Nieuwe poging over " + Math.max(Math.ceil(res.responseJSON.wait_seconds), 10) + " seconden.");
-	        	
+
 	        	// Info voor de gebruiker
-	        	secondsLeft = Math.ceil(res.responseJSON.wait_seconds)
+	        	secondsLeft = Math.ceil(res.responseJSON.wait_seconds);
 	        	intervalId = setInterval( () => {
 	        		secondsLeft -= 10;
 	        		console.log("Nog " + secondsLeft + " seconden tot de volgende actie!");
-	        	}, 10 * 1e3)
+	        	}, 10 * 1e3);
 	        } else {
 	        	setTimeout(() => {
-	        		checkPixels()
+	        		checkPixels();
 	        	}, 10* 1e3);
 	        	console.log("Probleem! Nieuwe poging over " + 10 + " seconden.");
 	        }
 	        return;
 	    });
 
-	}, 500)
+	}, 500);
 }
 
 function getTileAt(x, y) {
