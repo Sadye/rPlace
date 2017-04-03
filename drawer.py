@@ -345,10 +345,9 @@ class RedditPlaceClient:
 
             status, colour = await self.get_pixel_value_remote(x, y)
 
-            # Server overloaded
+            # Too manu requests to the reddit API, lets wait a minute
             if status == 502:
-                await asyncio.sleep(5)
-                continue
+                return None
 
             if colour == self.drawing_plan.get_colour(x, y):
                 # Colour already correct on server side, skip and search for
@@ -357,7 +356,7 @@ class RedditPlaceClient:
                             " the server side. Skipping.", (x, y))
 
                 # Wait a second to not spam the reddit server
-                await asyncio.sleep(2)
+                await asyncio.sleep(7.5)
                 continue
             else:
                 return x, y
@@ -373,11 +372,11 @@ class RedditPlaceClient:
                                     params=params) as resp:
             if resp.status == 502:
                 logger.info("Reddit API overloaded, no result.")
-                return -1
+                return resp.status, -1
             elif resp.status != 200:
                 text = await resp.text()
                 logger.warning("Could not get remote pixel value: %s", text)
-                return -1
+                return resp.status, -1
 
             try:
                 data = await resp.json(content_type=None)
