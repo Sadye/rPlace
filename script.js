@@ -103,7 +103,7 @@ function checkPixels() {
 		}
 		var ax = currentX + drawingData.startX;
 		var ay = currentY + drawingData.startY;
-		console.log("Aan het kijken naar de pixel op ("+ ax + ", " + ay +"). Het zou: " + getColorName(drawingData.colors[currentY][currentX]) + " moeten zijn. Het is momenteel: " + getColorName(getTileAt(ax, ay)));
+		console.log("Aan het kijken naar de pixel op ("+ ax + ", " + ay +"). Het zou " + getColorName(drawingData.colors[currentY][currentX]) + " moeten zijn. Het is momenteel " + getColorName(getTileAt(ax, ay)) + '.');
 		console.log("Als je hieronder nog een check ziet, betekent het dat iemand anders de pixel al verbeterd heeft maar het canvas nog niet bijgewerkt is.");
 		// zoek naar de correcte kleur
 		$.get("https://www.reddit.com/api/place/pixel.json?x=" + ax + "&y=" + ay)
@@ -212,19 +212,19 @@ function getColorName(id) {
 	}
 	const colorScheme = [
 	"wit",
-	"lgrijs",
-	"dgrijs",
+	"lichtgrijs",
+	"donkergrijs",
 	"zwart",
 	"roze",
 	"rood",
 	"oranje",
 	"bruin",
 	"geel",
-	"lgroen",
+	"lichtgroen",
 	"groen",
-	"lblauw",
+	"lichtblauw",
 	"blauw",
-	"dblauw",
+	"donkerblauw",
 	"magenta",
 	"paars",
 	"niets",
