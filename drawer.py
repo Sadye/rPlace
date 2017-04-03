@@ -3,12 +3,17 @@ import json
 import argparse
 import logging
 import warnings
+import time
 
 import asyncio
 import aiohttp
 
 REDDIT_LOGIN_URL = "https://www.reddit.com/post/login"
 REDDIT_PLACE_URL = "https://www.reddit.com/place?webview=true"
+DRAWING_DATA_URL = (
+    "https://raw.githubusercontent.com/Sadye/rPlace/master/data.json?"
+    "no-cache={}"
+)
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -18,15 +23,64 @@ modhash_regexp = re.compile(r'"modhash": "(\w+)",')
 ws_url_regexp = re.compile(r'"place_websocket_url": "([^"]+?)",')
 
 
+class DrawingPlan:
+    """Contains the data on what to draw."""
+
+    def __init__(self, session):
+        self.session = session
+
+        self.start_x = 0
+        self.start_y = 0
+        self.width = 0
+        self.height = 0
+        self.colors = [[]]
+        self.kill = False
+        self.version = -1
+
+    async def request(self):
+        """Refresh drawing plan data."""
+
+        current_time = int(time.time())
+        url = DRAWING_DATA_URL.format(current_time)
+
+        try:
+            async with self.session.get(url) as resp:
+                data = await resp.json(content_type=None)
+                self.start_x = data['start_x']
+                self.start_y = data['start_y']
+                self.colors = data['colors']
+                self.kill = data['kill']
+                self.version = data['newVersion']
+
+                self.height = len(self.colors)
+
+                if self.height > 0:
+                    self.width = max(len(row) for row in self.colors)
+                else:
+                    self.width = 0
+
+                logger.debug("Succesfully updated drawing plan.")
+                logger.debug("Start X: %d, start y: %d, kill: %s",
+                             self.start_x, self.start_y, self.kill)
+
+                return True
+        except (aiohttp.ClientError, KeyError) as e:
+            logger.exception(e)
+            return False
+
+
 class RedditPlaceClient:
     def __init__(self, session, loop=None):
         self.session = session
         self.modhash = ""
         self.ws_url = ""
 
+        self.drawing_plan = DrawingPlan(session)
+
         if not loop:
             loop = asyncio.get_event_loop()
         self.loop = loop
+
         self._running = False
 
     async def main(self, username, password):
@@ -45,6 +99,8 @@ class RedditPlaceClient:
 
         logger.debug("Modhash: %s", self.modhash)
         logger.debug("WS URL: %s", self.ws_url)
+
+        await self.drawing_plan.request()
 
         self.start_pixel_update_listener()
 
