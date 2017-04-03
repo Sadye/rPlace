@@ -9,7 +9,8 @@ De broncode voor het /r/PlaceNL-script (in javascript).
 
 1. Maak een nieuwe bladwijzer aan in je browser
 2. Vul de volgende code bij url in: `javascript:(function(){$.get('https://raw.githubusercontent.com/Sadye/rPlace/master/script.js'+'?no-cache='+(new Date).getTime(),function(data){eval(data);});})();`
-3. Klik op de bladwijzer wanneer je het script aan wilt zetten
+3. Ga naar https://www.reddit.com/place?webview=true
+4. Klik op de bladwijzer wanneer je het script aan wilt zetten. Refresh de pagina om het script uit te zetten.
 
 ### Geavanceerde methode
 
